@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Survival Skills AI Chatbot - modular offline system."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from cli import CLI
+from config import APP_DIR, CACHE_DIR, CATEGORIES, DB_PATH, ensure_app_dirs
+from database import KnowledgeBase
+from plugins import PluginManager
+from scraper import AutonomousScraper
+from updater import ContentUpdater, FileCache
+
+
+def bootstrap() -> tuple[KnowledgeBase, ContentUpdater, AutonomousScraper, CLI]:
+    ensure_app_dirs()
+    plugins_dir = APP_DIR / "plugins"
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+
+    db_exists = DB_PATH.exists()
+    kb = KnowledgeBase(DB_PATH)
+    cache = FileCache(CACHE_DIR)
+    manager = PluginManager(plugins_dir)
+    updater = ContentUpdater(kb, cache, manager)
+
+    if not db_exists:
+        print("No database found. Seeding and running initial scrape...")
+        updater.auto_update()
+
+    scraper = AutonomousScraper(updater)
+    cli = CLI(kb, updater, scraper)
+    return kb, updater, scraper, cli
+
+
+def main() -> None:
+    print(
+        f"""
++------------ SURVIVAL SKILLS AI CHATBOT ----------------+
+|     OFFLINE & SELF-UPDATE KNOWLEDGE SYSTEM             |
+
+[*] Database: {DB_PATH}
+[+] Cache: {CACHE_DIR}
+[x] Categories: {len(CATEGORIES)}
+"""
+    )
+    kb, _updater, scraper, cli = bootstrap()
+    scraper.start()
+    try:
+        cli.run()
+    finally:
+        scraper.stop()
+        kb.close()
+        print("\nGoodbye!")
+
+
+if __name__ == "__main__":
+    main()

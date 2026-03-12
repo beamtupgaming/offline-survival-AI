@@ -1,321 +1,283 @@
-# Survival Skills AI Chatbot
+# Survival Skills AI Chatbot (Modular)
 
-[![Status: active development](https://img.shields.io/badge/status-active%20development-orange)](https://github.com/yourusername/survival-ai-chatbot)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
-[![Platform: linux | macOS | windows](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-lightgrey)]()
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+Offline-first survival knowledge assistant with local storage, full-article retrieval, and autonomous background updates.
 
----
+## New Additions (Current State)
 
-## Overview
+- **Modular architecture:**
+  - `offline-survival-ai.py` — bootstrap + lifecycle wiring
+  - `config.py` — paths, categories, app constants, configurable timeouts
+  - `database.py` — Peewee ORM, FTS search, dedup/versioning, schema migration guards
+  - `plugins.py` — built-in plugins + custom sources support (generic URLs, local files/folders/ZIP, OpenLibrary) + drop-in external plugin loader
+  - `updater.py` — seeding, plugin ingestion, import/export, cache writes
+  - `scraper.py` — autonomous background scrape loop with internet checks, watchdog timeout (with improved logging), and rate-limiting on late-completion messages
+  - `cli.py` — interactive menu, search, chat with synthesis, full-article pagination, favorites, custom source management, import/export
+  - `utils.py` — sanitization, tokenization, JSON helpers, pagination helpers
 
-Survival Skills AI Chatbot is an **offline, autonomous survival knowledge assistant** that builds and maintains a **local, searchable database of survival information**.
+- **Search & Content:**
+  - Tokenization + synonym expansion + SQLite FTS5 (BM25) with SQL `LIKE` fallback.
+  - Content deduplication/versioning via `content_hash`, `revision`, `KnowledgeVersion` history.
+  - Auto-migration of existing databases for new columns (`source`, `content_hash`, `revision`, `last_updated`).
 
-The program runs as a **command-line chatbot** capable of:
+- **Chat Mode (Synthesis & Article Reading):**
+  - Generates direct extractive answers from top-matched local documents.
+  - Supports configurable per-session answer formats: `field-manual` (step-by-step + field notes) or `compact` (summary).
+  - Still returns full paginated source articles for context and deep reading.
+  - Type `style` in chat to toggle answer format mid-session.
 
-- Storing survival knowledge locally
-- Searching and browsing survival information
-- Answering questions from stored knowledge
-- Expanding its knowledge when internet access is available
-- Enriching and standardizing all information to Wikipedia-level detail
-- Running background updates and enrichment without blocking the CLI
-- Avoiding duplicate entries and warning about disk space usage
-- **Automatically searching public datasets (e.g., Project Gutenberg, Wikipedia) for relevant information**
-- **Resetting the cache and database from the CLI, which triggers a full rebuild and public data scrape on next launch**
+- **Custom Sources:**
+  - Ingest from URLs (generic `http`/`https`), local file paths, folders (recursive), and ZIP archives.
+  - Supported document types: `.txt`, `.md`, `.html`, `.htm`, `.pdf`, `.doc`, `.docx`.
+  - Each extracted document becomes its own searchable and readable topic (appears in pagination).
+  - OpenLibrary integration via `provider: openlibrary` with subject-based fetching and automatic category inference.
+  - Manage all custom sources from CLI menu option `12` (add/list/remove/toggle/edit).
 
-All information is stored **locally on your machine**, allowing the assistant to function even when completely offline.
+- **Background Scraper Improvements:**
+  - User-triggered manual updates pause background scraping to prevent watchdog timeouts.
+  - Watchdog timeout logs now include configured timeout seconds and background-completion status.
+  - Late-completion log messages are rate-limited (configurable `LATE_COMPLETION_LOG_COOLDOWN_SECONDS`).
 
----
+## Linux CLI Install (Step-by-Step with `venv`)
 
-## Features
+### 1) Prerequisites
 
-### Local Knowledge Base
+On Debian/Ubuntu:
 
-- SQLite database
-- Organized survival knowledge categories
-- Searchable offline
-- Fast keyword queries
-- Automatic enrichment for short entries
-- **Automatic public dataset search and enrichment**
-- **Database and cache reset from CLI**
-
----
-
-### Automatic Public Dataset Search
-
-If web scraping fails or returns no results, the system will automatically search public datasets (such as Project Gutenberg, Wikipedia) for relevant books or documents and add references to the knowledge base. This ensures the database is always enriched with high-quality, open-access information.
-
----
-
-### Data Sources
-
-- **Public datasets and documents (Project Gutenberg, Wikipedia, public domain books, open data portals)**
-- Built-in survival knowledge
-
----
-
-## System Architecture
-
-```mermaid
-flowchart TD
-
-User[User CLI Interface]
-
-CLI[Command Line Interface]
-
-KB[(SQLite Knowledge Base)]
-
-Cache[File Cache]
-
-Updater[Content Updater]
-
-Scraper[Autonomous Background Scraper]
-
-Internet[(Internet Sources)]
-
-User --> CLI
-
-CLI --> KB
-CLI --> Cache
-
-Updater --> KB
-Updater --> Internet
-
-Scraper --> Updater
-
-Updater --> Cache
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip
 ```
 
----
+Verify:
 
-## Local Storage Structure
-
-The application stores its data under:
-
-```text
-~/.survival_chatbot/
+```bash
+python3 --version
 ```
 
-Directory layout:
+### 2) Open project folder
 
-```text
-.survival_chatbot/
-
-knowledge.db
-
-cache/
-    category folders
-    cached articles
-
-media/
-    videos
-    pdfs
-    audio
-    documents
-
-media_tracking.json
-custom_sources.json
-scrape_tracking.json
+```bash
+cd /path/to/offline-survival-AI
 ```
 
----
+### 3) Create a virtual environment
 
-## Requirements
-
-Python 3.8 or newer.
-
-The project uses only the Python standard library:
-
-```text
-sqlite3
-json
-urllib
-hashlib
-threading
-re
-pathlib
-datetime
-time
+```bash
+python3 -m venv .venv
 ```
 
-No external dependencies are required.
+### 4) Activate the virtual environment
 
----
-
-## Installation
-
-Clone the repository:
-
-```sh
-git clone https://github.com/yourusername/survival-ai-chatbot.git
-cd survival-ai-chatbot
+```bash
+source .venv/bin/activate
 ```
 
-Run the program:
+After activation, your prompt should show `(.venv)`.
 
-```sh
-python3 offline-survival-ai.py
+### 5) Upgrade packaging tools (recommended)
+
+```bash
+python -m pip install --upgrade pip setuptools wheel
 ```
 
-On first launch or after a cache/database reset the system will:
+### 6) Install project dependencies
 
-1. Create the local database
-2. Load built-in survival knowledge
-3. Scrape only public datasets (Project Gutenberg, Wikipedia)
-4. Start the background scraper and enrichment
-
----
-
-## CLI Interface
-
-Main menu:
-
-```text
-+-- SURVIVAL AI CHATBOT ------------------------------------+
-
-[1] Search knowledge
-[2] Browse categories
-[3] Chat
-[4] View all knowledge
-[5] Update knowledge
-[6] Deep dive web scrape
-[7] Delete the cache
-[0] Exit
+```bash
+pip install -r requirements.txt
 ```
 
-- **[7] Delete the cache**: Removes all cached files and the database. On next launch, a new database is built and a full public data scrape is triggered.
+### 7) Run the chatbot
 
----
-
-## Chat Example
-
-User input:
-
-```text
-how do I start a fire without matches
+```bash
+python offline-survival-ai.py
 ```
 
-Example response:
+First run behavior:
 
-```text
-Assistant:
+- Creates app data under `~/.survival_chatbot/`
+- Creates `knowledge.db` and cache/media folders
+- Seeds built-in content
+- Runs initial plugin-driven update
+- Starts background scraper loop
 
-Based on Fire Making Techniques
+### 8) Exit and deactivate `venv`
+
+When done:
+
+```bash
+deactivate
 ```
 
----
+### 9) Next time you use the project
 
-## Deep Dive Scraping
-
-You can run a deeper scraping session from the CLI.
-
-Menu option:
-
-```text
-6 -> Deep dive web scrape
+```bash
+cd /path/to/offline-survival-AI
+source .venv/bin/activate
+python offline-survival-ai.py
 ```
 
-This collects additional survival-related information from the web and enriches it for detail.
+## CLI Menu & Usage
 
----
+**Main Menu Options:**
 
-## Privacy
+- `[1]` Search knowledge — ranked full-text search, then paginate through results
+- `[2]` Browse categories — select category, view all entries
+- `[3]` Chat — ask a question, receive synthesized answer + source articles (type `style` to toggle format)
+- `[4]` View summary — count of entries per category
+- `[5]` Update knowledge — run manual update from configured sources
+- `[6]` Deep dive — extended scrape from plugins
+- `[7]` Delete cache — wipe database and cache (restart rebuilds)
+- `[8]` Recent searches — view search history
+- `[9]` Favorites — view saved articles (toggle with `f#` in results)
+- `[10]` Export knowledge — save all entries to JSON
+- `[11]` Import knowledge — load entries from JSON file
+- `[12]` Manage custom sources — add/list/remove/toggle/edit sources (saved to `~/.survival_chatbot/custom_sources.json`)
 
-This project:
+**Navigation Keys (in paginated views):**
 
-- Stores data locally
-- Does not require accounts
-- Does not use external APIs
-- Does not upload user data
+- `n` — next page
+- `p` — previous page
+- `f#` — toggle favorite (e.g., `f2` for item 2)
+- `#` — open item (by number)
+- `b` — back to results
+- `menu` — return to main menu
+- `exit` — quit app
 
----
+**Chat-Specific Commands:**
 
-## Recent & Planned Features
+- Type `style` to toggle between `field-manual` and `compact` answer formats (per session).
+- Type `menu` to return to main menu.
+- Type `exit` to quit.
 
-### Recent Major Updates
+## Plugins
 
-- Autonomous dataset discovery, download, and extraction
-- Disk space estimation and user warnings
-- Duplicate file and knowledge entry avoidance
-- Responsive CLI with background scraping and progress feedback
-- Automated enrichment of short entries to Wikipedia-level detail
-- Robust error handling and code optimization
-- All information output standardized for detail and consistency
+Built-in plugins:
 
-### Planned Improvements
+- Project Gutenberg (`project_gutenberg`)
+- Wikipedia API (`wikipedia_api`)
+- Offline media indexer (`offline_media_index`)
+- Custom sources (`custom_sources`)
 
-- Local LLM integration
-- Semantic search and vector embeddings
-- Improved conversational responses
-- Better scraping sources and dataset ingestion
-- PDF/media indexing and downloads
-- Knowledge deduplication and ranking
-- Database optimization and backup tools
-- Enhanced CLI navigation and user experience
+Custom sources format:
 
----
+- File path: `~/.survival_chatbot/custom_sources.json`
+- Supported JSON shape: list of entries (or `{ "sources": [...] }`)
+- Entry fields:
+  - `name` (string)
+  - `url` (string, required; supports `https://...`, local file path, local folder path, or `.zip` archive path)
+  - `provider` (string, optional; `generic` or `openlibrary`)
+  - `categories` (list of category keys, optional; blank means all)
+  - `queries` (list of substring filters, optional; blank means all)
+  - `subjects` (list, optional; used by `openlibrary` provider)
+  - `enabled` (bool, optional, default true)
 
-## Long Term Vision
+Local-file ingestion notes:
 
-The long-term goal is to build a **fully autonomous offline survival knowledge system** capable of:
-
-- Expanding its own knowledge
-- Functioning without internet access
-- Providing survival information in remote environments
-- Acting as a resilient preparedness tool
-
----
-
-## Example Interface
-
-You can add screenshots to the repository.
+- Supported source files: `.txt`, `.md`, `.html`, `.htm`, `.pdf`, `.doc`, `.docx`
+- Supported archive source: `.zip` (scans supported files inside archive)
+- Folder sources are scanned recursively for the same supported file types.
+- Each extracted file is saved as its own knowledge topic, so it opens in the existing paginated article reader.
 
 Example:
 
-```text
-assets/screenshot_cli.png
+```json
+[
+  {
+    "name": "Field Manual",
+    "url": "https://example.org/survival-notes",
+    "categories": ["survival_techniques"],
+    "queries": ["shelter", "water"],
+    "enabled": true
+  }
+]
 ```
 
-Then reference it in the README:
+OpenLibrary example:
 
-```markdown
-![CLI Screenshot](assets/screenshot_cli.png)
+```json
+[
+  {
+    "name": "OpenLibrary Survival",
+    "provider": "openlibrary",
+    "url": "https://openlibrary.org",
+    "subjects": ["fishing", "bushcraft", "wilderness survival"],
+    "categories": ["fishing", "survival_techniques"],
+    "queries": ["improvised", "setup"],
+    "enabled": true
+  }
+]
 ```
 
----
+**OpenLibrary Provider Behavior:**
 
-## Contributing
+- Searches OpenLibrary API by configured `subjects` (e.g., "fishing", "bushcraft").
+- Stores each matching work (book) as an individual topic with metadata (author, year, subjects, summary, OpenLibrary link).
+- Infers best-fit category from work subjects or configured categories (with keyword mapping for survival domains).
+- Full topic content is searchable and readable in the paginated article viewer.
+- Works are fetched on demand during updates or deep-dive scrapes.
 
-Contributions are welcome.
+**Chat Synthesis Behavior:**
 
-Ways to contribute:
+- Searches downloaded local knowledge on user query.
+- Extracts relevant sentences from top-ranked documents and synthesizes a direct answer.
+- Formats response based on configured style:
+  - **`field-manual`** (default): Numbered steps + field notes + source cues.
+  - **`compact`**: Direct summary (first 2-3 ranked sentences).
+- Afterward shows matching source articles for full-context reading.
+- Type `style` in chat mode to toggle format mid-session.
 
-- Improve scraping logic
-- Add survival datasets
-- Enhance the CLI
-- Optimize the database
-- Improve search capabilities
+External plugins:
 
-To contribute:
+- Place `.py` files in `~/.survival_chatbot/plugins/`
+- Expose class `Plugin` with:
+  - `name: str`
+  - `fetch(query: str, category: str) -> list[dict[str, str]]`
 
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
+Expected returned keys per record:
 
----
+- `category`
+- `title`
+- `content`
+- `source`
 
-## Disclaimer
+## Import / Export
 
-This project is intended for **educational and preparedness purposes only**.
+- Export from CLI option `10` to a JSON file.
+- Import from CLI option `11` from a JSON file.
+- Invalid categories in imported JSON are skipped for safety.
 
-Always verify survival or medical information from trusted sources before relying on it in real-world situations.
+## Run Tests
 
----
+```bash
+pytest -q
+```
 
-## License
+## Troubleshooting
 
-MIT License
+- `sqlite3.OperationalError` mentioning `fts5`:
+  Your Python SQLite build may not include FTS5.
 
----
+  Check SQLite version:
 
-If you find this project interesting, consider starring the repository.
+  ```bash
+  python -c "import sqlite3; print(sqlite3.sqlite_version)"
+  ```
+
+- `source .venv/bin/activate` fails:
+  Ensure you created the environment in the project root with `python3 -m venv .venv`.
+
+- External plugins are not loading:
+  Confirm plugin files are in `~/.survival_chatbot/plugins/` and define `Plugin` with `name` and `fetch(...)`.
+
+- Background scraping appears idle:
+  Scraper pauses while user input is active and respects the configured background interval. Manual updates (menu option 5) will pause background scraping to avoid watchdog timeouts.
+
+- "Background update watchdog timeout reached" message:
+  A background update took longer than `WATCHDOG_TIMEOUT_SECONDS` (default 90s). The update continues in the background; you'll see a follow-up message when it finishes (rate-limited). To adjust timeout, edit `config.py` or use environment variable overrides.
+
+## Dependency Notes
+
+- `peewee` >= 3.17.0 — ORM and schema management
+- `prompt_toolkit` >= 3.0.0 — optional enhanced input; app falls back to standard `input()` if unavailable
+- `pypdf` >= 5.0.0 — PDF text extraction for custom sources
+- `pytest` >= 8.0.0, `pytest-mock` >= 3.0.0 — test dependencies
