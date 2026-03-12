@@ -1,4 +1,5 @@
 import json
+import urllib.parse
 from pathlib import Path
 
 from database import KnowledgeBase
@@ -27,7 +28,12 @@ def test_openlibrary_subject_source_ingests_individual_topics(tmp_path: Path, mo
     def fake_urlopen(request, timeout=12):
         _ = timeout
         url = request.full_url
-        if "openlibrary.org/subjects" in url:
+        try:
+            parsed = urllib.parse.urlparse(url)
+            is_openlibrary = (parsed.hostname or "").lower() == "openlibrary.org"
+        except (ValueError, TypeError):
+            is_openlibrary = False
+        if is_openlibrary and "/subjects" in url:
             return _FakeResponse(
                 {
                     "works": [

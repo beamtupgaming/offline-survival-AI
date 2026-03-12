@@ -174,8 +174,14 @@ class CustomSourcesPlugin:
 
             name = str(item.get("name", "")).strip() or f"Custom Source {idx}"
             provider = str(item.get("provider", "")).strip().lower()
-            if not provider and "openlibrary.org" in url.lower():
-                provider = "openlibrary"
+            if not provider:
+                try:
+                    parsed = urllib.parse.urlparse(url)
+                    hostname = parsed.hostname or ""
+                    if hostname.lower() == "openlibrary.org":
+                        provider = "openlibrary"
+                except (ValueError, TypeError):
+                    pass
             if provider not in {"", "generic", "openlibrary"}:
                 provider = "generic"
 
